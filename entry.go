@@ -15,7 +15,7 @@ import (
 var (
 
 	// qualified package name, cached at first use
-	logrusPackage string
+	skipPackageNameForCaller = make(map[string]struct{}, 1)
 
 	// Positions in the call stack when tracing to report the calling method
 	minimumCallerDepth int
@@ -180,7 +180,7 @@ func getCaller() *runtime.Frame {
 		for i := 0; i < maximumCallerDepth; i++ {
 			funcName := runtime.FuncForPC(pcs[i]).Name()
 			if strings.Contains(funcName, "getCaller") {
-				logrusPackage = getPackageName(funcName)
+				AddSkipPackageFromStackTrace(getPackageName(runtime.FuncForPC(pcs[1]).Name()))
 				break
 			}
 		}
@@ -194,11 +194,10 @@ func getCaller() *runtime.Frame {
 	frames := runtime.CallersFrames(pcs[:depth])
 
 	for f, again := frames.Next(); again; f, again = frames.Next() {
-		pkg := getPackageName(f.Function)
 
 		// If the caller isn't part of this package, we're done
-		if pkg != logrusPackage {
-			return &f //nolint:scopelint
+		if _, has := skipPackageNameForCaller[getPackageName(f.Function)]; !has {
+			return &f
 		}
 	}
 
